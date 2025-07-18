@@ -9,12 +9,12 @@
 
 using std::string;
 
-#define SCAN_INTERVAL_MS 5000
+#define SCAN_INTERVAL_MS 10000
 #define ID_REFRESH_INTERVAL_MS 600000 // 10 mins
 #define RSSI_THRESHOLD -50
 #define EEPROM_SIZE 4096
 #define MAX_LOGS 30
-#define EXPOSURE_WINDOW_MS 6000
+#define EXPOSURE_WINDOW_MS 10000
 
 BLEAdvertising* pAdvertising;
 BLEScan* pBLEScan;
@@ -197,6 +197,4 @@ void loop() {
     
     pBLEScan->start(SCAN_INTERVAL_MS / 1000, false);
     pBLEScan->clearResults();
-
-    delay(5000);
 }
