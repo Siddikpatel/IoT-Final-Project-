@@ -10,7 +10,7 @@
 using std::string;
 
 #define SCAN_INTERVAL_MS 5000
-#define ID_REFRESH_INTERVAL_MS 300000 // 5 mins
+#define ID_REFRESH_INTERVAL_MS 600000 // 10 mins
 #define RSSI_THRESHOLD -50
 #define EEPROM_SIZE 4096
 #define MAX_LOGS 30
@@ -23,6 +23,7 @@ unsigned long lastIDRefresh = 0;
 unsigned long bootTime = 0;  
 bool timeInitialized = false;
 bool printed = false;
+uint32_t duration = 0;
 
 struct ContactLog {
     uint32_t relativeTimestamp;
@@ -107,80 +108,49 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
 
         string peerID = advertisedDevice.getManufacturerData().c_str();
 
-        uint32_t duration = 0;
-
-        for (int i = 0; i < logIndex; i++) {
-            if (logs[i].peerID == peerID) {
-                logs[i].duration += SCAN_INTERVAL_MS;
-                duration = logs[i].duration;
-                break;
-            }
-        }
+        duration += SCAN_INTERVAL_MS;
 
         if (logIndex < MAX_LOGS) {
             
-            digitalWrite(LED_BUILTIN, HIGH);
             unsigned long timestamp = timeInitialized ? time(nullptr) : millis();
 
+            if (duration >= EXPOSURE_WINDOW_MS && rssi >= RSSI_THRESHOLD) {
 
-            logs[logIndex++] = {
-                .relativeTimestamp = timestamp,
-                .peerID = peerID,
-                .rssi = rssi,
-                .duration = duration
-            };
+                digitalWrite(LED_BUILTIN, HIGH);
 
-            if (timeInitialized) {
-                time_t logTime = timestamp;
-                struct tm timeinfo;
-                localtime_r(&logTime, &timeinfo);
-                char timeStr[30];
-                strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &timeinfo);
+                logs[logIndex++] = {
+                    .relativeTimestamp = timestamp,
+                    .peerID = peerID,
+                    .rssi = rssi,
+                    .duration = duration
+                };
 
-                Serial.printf("%s,%s,%d,%lu\n",
-                    timeStr,
-                    peerID.c_str(),
-                    rssi,
-                    duration
-                );
+                if (timeInitialized) {
+                    time_t logTime = timestamp;
+                    struct tm timeinfo;
+                    localtime_r(&logTime, &timeinfo);
+                    char timeStr[30];
+                    strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &timeinfo);
+
+                    Serial.printf("%s,%s,%d,%lu\n",
+                        timeStr,
+                        peerID.c_str(),
+                        rssi,
+                        duration
+                    );
+                }
             }
         } else {
             if(!printed) {
                 saveLogsToEEPROM();
                 printed = true;
+                Serial.println("Done.");
             } else {
                 digitalWrite(LED_BUILTIN, LOW);
             }
         }
     }
 };
-
-// === Print logs as CSV ===
-bool printLogsAsCSV() {
-    bool found = false;
-    for (int i = 0; i < logIndex; i++) {
-        if (logs[i].duration >= EXPOSURE_WINDOW_MS && logs[i].rssi >= RSSI_THRESHOLD) {
-            time_t logTime = logs[i].relativeTimestamp; // this should be Unix timestamp
-            
-            // Convert Unix timestamp to struct tm in local time
-            struct tm timeinfo;
-            localtime_r(&logTime, &timeinfo);
-            char timeStr[30];
-            // Format time into YYYY-MM-DD HH:MM:SS
-            strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &timeinfo);
-
-            Serial.printf("%lu,%s,%d,%lu\n",
-                timeStr,
-                logs[i].peerID.c_str(),
-                logs[i].rssi,
-                logs[i].duration
-            );
-            found = true;
-            digitalWrite(LED_BUILTIN, HIGH);
-        }
-    }
-    return found;
-}
 
 void setup() {
     Serial.begin(115200);
